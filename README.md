@@ -5,7 +5,11 @@ PSExcel
 
 ### New!
 
-* Updated the EPPlus libraries from 4.0.4.0 to 4.1.1.0
+* [OpusTecnica] - Updated the EPPlus libraries from 4.0.4.0 to 4.1.1.0
+* [OpusTecnica] - [Import-XLSX.ps1] Added ReadOnly option to access files that are already open.
+* [OpusTecnica] - [Import-XLSX.ps1] Added native excel column headers when the first row is data.
+                  This is limited to columns from A to Z at the moment, but can be easily expanded.  
+* [OpusTecnica] - [Import-XLSX.ps1] Some reformatting for personal preference.
 
 ***
 This is a rudimentary PowerShell module for working with Excel via the [EPPlus](http://epplus.codeplex.com/) library, with no dependencies on Excel itself.
