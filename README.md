@@ -3,6 +3,11 @@
 PSExcel
 =============
 
+### New!
+
+* Updated the EPPlus libraries from 4.0.4.0 to 4.1.1.0
+
+
 This is a rudimentary PowerShell module for working with Excel via the [EPPlus](http://epplus.codeplex.com/) library, with no dependencies on Excel itself.
 
 * Thanks to Doug Finke for his [ImportExcel example](https://github.com/dfinke/ImportExcel) - hadn't seen EPPlus before this!
