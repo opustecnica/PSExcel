@@ -37,7 +37,13 @@
     .EXAMPLE
         Import-XLSX -Path "C:\Excel.xlsx"
 
-        #Import data from C:\Excel.xlsx
+        # Import data from C:\Excel.xlsx
+
+    .EXAMPLE
+        Import-XLSX -Path "C:\Excel.xlsx" -ReadOnly
+
+        # Import data from C:\Excel.xlsx even when the file has already been opened by a 
+        # different application/user
 
     .EXAMPLE
         Import-XLSX -Path "C:\Excel.xlsx" -Header One, Two, Five
@@ -71,6 +77,11 @@
         Thanks to Philip Thompson for an expansive set of examples on working with EPPlus in PowerShell:
             https://excelpslib.codeplex.com/
 
+        [OpusTecnica] - Added ReadOnly option to access files that are already open.
+        [OpusTecnica] - Added native excel column headers when the first row is data.
+                        This is limited to columns A to Z at the moment, but can be easily expanded.  
+        [OpusTecnica] - Some reformatting for personal preference.
+
     .LINK
         https://github.com/RamblingCookieMonster/PSExcel
 
@@ -97,137 +108,138 @@
 
         [int]$RowStart = 1,
 
-        [int]$ColumnStart = 1
+        [int]$ColumnStart = 1,
+
+        [switch]$ReadOnly
     )
-    Process
-    {
-        foreach($file in $path)
-        {
+    
+    Begin {
+        [string[]]$Alphabet = [char[]]([int][char]'A'..[int][char]'Z')
+    }
+
+    Process {
+        foreach($File in $Path) {
             #Resolve relative paths... Thanks Oisin! http://stackoverflow.com/a/3040982/3067642
-            $file = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($file)
+            $File = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($File)
 
-            write-verbose "target excel file $($file)"
+            write-verbose "Target excel file $($File)"
 
-            Try
-            {
-                $xl = New-Object OfficeOpenXml.ExcelPackage $file
-                $workbook  = $xl.Workbook
+            Try {
+                if ($ReadOnly) {
+                    Write-Verbose "Opening $($File) as Read-Only"
+                    $ReadOnlyFile = [IO.File]::Open($File,'Open','Read','ReadWrite')
+                    $ExcelFile = New-Object OfficeOpenXml.ExcelPackage
+                    $ExcelFile.Load($ReadOnlyFile)
+                    $workbook  = $ExcelFile.Workbook
+                } else {
+                    $ExcelFile = New-Object OfficeOpenXml.ExcelPackage $File
+                    $Workbook  = $ExcelFile.Workbook
+                }
             }
-            Catch
-            {
-                Write-Error "Failed to open '$file':`n$_"
+
+            Catch {
+                Write-Error "Failed to open '$File':`n$_"
                 continue
             }
 
-            Try
-            {
-                if( @($workbook.Worksheets).count -eq 0)
-                {
+            Try {
+                if( @($Workbook.Worksheets).count -eq 0) {
                     Throw "No worksheets found"
-                }
-                else
-                {
-                    $worksheet = $workbook.Worksheets[$Sheet]
-                    $dimension = $worksheet.Dimension
+                } else {
+                    $Worksheet = $Workbook.Worksheets[$Sheet]
+                    $Dimension = $Worksheet.Dimension
+                    Write-Verbose "WORKSHEET: $Worksheet"
+                    Write-Verbose "DIMENSIONS: $Dimension"
 
-                    $Rows = $dimension.Rows
-                    $Columns = $dimension.Columns
+                    $Rows = $Dimension.Rows
+                    $Columns = $Dimension.Columns
+                    Write-Verbose "ROWS: $Rows"
+                    Write-Verbose "COLUMNS: $Columns"
 
                     $ColumnEnd = $Columns + $ColumnStart - 1
                     $RowEnd = $Rows + $RowStart - 1
-                }
-
+                    Write-Verbose "LAST COLUMN: $ColumnEnd"
+                    Write-Verbose "LAST ROW: $RowEnd"
+                } 
             }
-            Catch
-            {
-                Write-Error "Failed to gather Worksheet '$Sheet' data for file '$file':`n$_"
+
+            Catch {
+                Write-Error "Failed to gather Worksheet '$Sheet' data for file '$File':"
+                Write-Error $_
                 continue
             }
   
-            if($Header -and $Header.count -gt 0)
-            {
-                if($Header.count -ne $Columns)
-                {
-                    Write-Error "Found '$columns' columns, provided $($header.count) headers.  You must provide a header for every column."
+            if($Header -and $Header.count -gt 0) {
+                if($Header.count -ne $Columns) {
+                    Write-Error "Found '$Columns' columns, provided $($Header.count) headers.  You must provide a header for every column."
                 }
                 Write-Verbose "User defined headers: $Header"
-            }
-            else 
-            {
-                $Header = @( foreach ($Column in $ColumnStart..$ColumnEnd)
-                {
-                    if($Text)
-                    {
-                        $PotentialHeader = $worksheet.Cells.Item($RowStart,$Column).Text
-                    }
-                    else
-                    {
-                        $PotentialHeader = $worksheet.Cells.Item($RowStart,$Column).Value
+            } else {
+                $Header = @( foreach ($Column in $ColumnStart..$ColumnEnd) {
+                    if($Text) {
+                        $PotentialHeader = $Worksheet.Cells.Item($RowStart,$Column).Text
+                    } else {
+                        # Handle Native Column Headers in absence of headers.
+                        if ( $FirstRowIsData ) {
+                            if ( $Column -le $Alphabet.Count ) {
+                                $PotentialHeader = $Alphabet[$Column - 1]
+                            } else {
+                                $PotentialHeader = $Alphabet[[int]($Column / $Alphabet.Count) - 1] + $Alphabet[[int]($Column % $Alphabet.Count) - 1]
+                            } # End if FirstRowIsData
+                        } else {
+                            $PotentialHeader = $Worksheet.Cells.Item($RowStart,$Column).Value
+                        }
                     }
 
-                    if( -Not $PotentialHeader -Or $PotentialHeader.Trim().Equals("") )
-                    {
-                        Write-Warning "Header in column $Column is whitespace or empty, setting header to '<Column $Column>'"
+                    # [opustecnica] if( -Not $PotentialHeader -Or $PotentialHeader.Trim().Equals("") ) # Produces Error if data has no header.
+                    if ( -Not $PotentialHeader -Or ($PotentialHeader -isnot [string]) -or $PotentialHeader.Trim().Equals("")) {
+                        Write-Verbose "Header in column $Column is whitespace or empty, setting header to '<Column $Column>'"
                         $PotentialHeader = "<Column $Column>" # Use placeholder name
                     }
                     $PotentialHeader
-                })
+                }) # End Header =
             }
 
             [string[]]$SelectedHeaders = @( $Header | select -Unique )
             Write-Verbose "Found $Rows rows, $Columns columns, with headers:`n$($Header | Out-String)"
 
-            if(-not $FirstRowIsData)
-            {
-                $RowStart++
-            }
+            if (-not $FirstRowIsData) { $RowStart++ }
 
-            foreach ($Row in $RowStart..$RowEnd)
-            {
+            foreach ($Row in $RowStart..$RowEnd) {
                 $RowData = @{}
 
-                foreach ($Column in 0..($Columns - 1))
-                {
+                foreach ($Column in 0..($Columns - 1)) {
                     $Name  = $Header[$Column]
-                    if($Text)
-                    {
-                        $Value = $worksheet.Cells.Item($Row, ($Column + $ColumnStart)).Text
-                    }
-                    else
-                    {
-                        $Value = $worksheet.Cells.Item($Row, ($Column + $ColumnStart)).Value
+                    if ($Text) { 
+                        $Value = $Worksheet.Cells.Item($Row, ($Column + $ColumnStart)).Text
+                    } else {
+                        $Value = $Worksheet.Cells.Item($Row, ($Column + $ColumnStart)).Value
                     }
 
                     Write-Debug "Row: $Row, Column: $Column, Name: $Name, Value = $Value"
 
-                    #Handle dates, they're too common to overlook... Could use help, not sure if this is the best regex to use?
-                    $Format = $worksheet.Cells.Item($Row, ($Column + $ColumnStart)).style.numberformat.format
-                    if($Format -match '\w{1,4}/\w{1,2}/\w{1,4}( \w{1,2}:\w{1,2})?' -or $Format -match $DateTimeFormat)
-                    {
-                        Try
-                        {
+                    # Handle dates, they're too common to overlook... Could use help, not sure if this is the best regex to use?
+                    $Format = $Worksheet.Cells.Item($Row, ($Column + $ColumnStart)).style.numberformat.format
+                    if ($Format -match '\w{1,4}/\w{1,2}/\w{1,4}( \w{1,2}:\w{1,2})?' -or $Format -match $DateTimeFormat) {
+                        Try {
                             $Value = [datetime]::FromOADate($Value)
                         }
-                        Catch
-                        {
+                        Catch {
                             Write-Verbose "Error converting '$Value' to datetime"
                         }
                     }
 
-                    if($RowData.ContainsKey($Name) )
-                    {
+                    if ( $RowData.ContainsKey($Name) ) {
                         Write-Warning "Duplicate header for '$Name' found, with value '$Value', in row $Row"
-                    }
-                    else
-                    {
+                    } else {
                         $RowData.Add($Name, $Value)
                     }
                 }
                 New-Object -TypeName PSObject -Property $RowData | Select -Property $SelectedHeaders
             }
 
-            $xl.Dispose()
-            $xl = $null
+            $ExcelFile.Dispose()
+            $ExcelFile = $null
         }
     }
 }
