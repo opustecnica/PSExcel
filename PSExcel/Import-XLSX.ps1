@@ -81,6 +81,8 @@
         [OpusTecnica] - Added native excel column headers when the first row is data.
                         This is limited to columns A to Z at the moment, but can be easily expanded.  
         [OpusTecnica] - Some reformatting for personal preference.
+        [OpusTecnica] - Added trimming of the headers to account for superfluous white spaces.
+        [OpusTecnica] - Added ColumnEnd Parameter.
 
     .LINK
         https://github.com/RamblingCookieMonster/PSExcel
@@ -109,6 +111,8 @@
         [int]$RowStart = 1,
 
         [int]$ColumnStart = 1,
+        
+        [int]$ColumnEnd = $null,
 
         [switch]$ReadOnly
     )
@@ -116,7 +120,6 @@
     Begin {
         [string[]]$Alphabet = [char[]]([int][char]'A'..[int][char]'Z')
     }
-
     Process {
         foreach($File in $Path) {
             #Resolve relative paths... Thanks Oisin! http://stackoverflow.com/a/3040982/3067642
