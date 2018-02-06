@@ -196,7 +196,7 @@
                         Write-Verbose "Header in column $Column is whitespace or empty, setting header to '<Column $Column>'"
                         $PotentialHeader = "<Column $Column>" # Use placeholder name
                     }
-                    $PotentialHeader
+                    $PotentialHeader.Trim()
                 }) # End Header =
             }
 
