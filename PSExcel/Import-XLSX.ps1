@@ -159,6 +159,8 @@
                     Write-Verbose "ROWS: $Rows"
                     Write-Verbose "COLUMNS: $Columns"
 
+                    # [opustecnica] Add ColumnEnd User Input Parameter
+                    if ( $ColumnEnd ) { $Columns = $ColumnEnd }                   
                     $ColumnEnd = $Columns + $ColumnStart - 1
                     $RowEnd = $Rows + $RowStart - 1
                     Write-Verbose "LAST COLUMN: $ColumnEnd"
