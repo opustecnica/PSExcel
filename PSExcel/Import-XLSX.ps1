@@ -79,7 +79,7 @@
 
         [OpusTecnica] - Added ReadOnly option to access files that are already open.
         [OpusTecnica] - Added native excel column headers when the first row is data.
-                        This is limited to columns A to Z at the moment, but can be easily expanded.  
+                        This is limited to columns A to ZZ at the moment, but can be easily expanded.  
         [OpusTecnica] - Some reformatting for personal preference.
         [OpusTecnica] - Added trimming of the headers to account for superfluous white spaces.
         [OpusTecnica] - Added ColumnEnd Parameter.
@@ -119,6 +119,14 @@
     
     Begin {
         [string[]]$Alphabet = [char[]]([int][char]'A'..[int][char]'Z')
+        # TODO: Make recursive and build loop bounded by $ColumnEnd
+        0..25 | 
+            ForEach-Object { 
+                $Letter = $_
+                0..25 | ForEach-Object { 
+                    $Alphabet += "$($Alphabet[$Letter])$($Alphabet[$_])" 
+                } 
+            }
     }
     Process {
         foreach($File in $Path) {
