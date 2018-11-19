@@ -1,4 +1,4 @@
-﻿function Import-XLSX {
+function Import-XLSX {
     <#
     .SYNOPSIS
         Import data from Excel
@@ -37,13 +37,7 @@
     .EXAMPLE
         Import-XLSX -Path "C:\Excel.xlsx"
 
-        # Import data from C:\Excel.xlsx
-
-    .EXAMPLE
-        Import-XLSX -Path "C:\Excel.xlsx" -ReadOnly
-
-        # Import data from C:\Excel.xlsx even when the file has already been opened by a 
-        # different application/user
+        #Import data from C:\Excel.xlsx
 
     .EXAMPLE
         Import-XLSX -Path "C:\Excel.xlsx" -Header One, Two, Five
@@ -79,10 +73,8 @@
 
         [OpusTecnica] - Added ReadOnly option to access files that are already open.
         [OpusTecnica] - Added native excel column headers when the first row is data.
-                        This is limited to columns A to ZZ at the moment, but can be easily expanded.  
         [OpusTecnica] - Some reformatting for personal preference.
-        [OpusTecnica] - Added trimming of the headers to account for superfluous white spaces.
-        [OpusTecnica] - Added ColumnEnd Parameter.
+        import-module PSExcel -Force; $Data = Import-XLSX -Path 'H:\MyDocs\test2.xlsx' -ReadOnly -RowStart 2 -RowEnd 10 -ColumnStart 2 -ColumnEnd 9 -HeaderRow 5; $Data | FT * -A
 
     .LINK
         https://github.com/RamblingCookieMonster/PSExcel
@@ -110,24 +102,21 @@
 
         [int]$RowStart = 1,
 
+        [int]$RowEnd = 0,
+
         [int]$ColumnStart = 1,
-        
-        [int]$ColumnEnd = $null,
+
+        [int]$ColumnEnd= 0,
+
+        [int]$HeaderRow = 0,
 
         [switch]$ReadOnly
     )
     
     Begin {
         [string[]]$Alphabet = [char[]]([int][char]'A'..[int][char]'Z')
-        # TODO: Make recursive and build loop bounded by $ColumnEnd
-        0..25 | 
-            ForEach-Object { 
-                $Letter = $_
-                0..25 | ForEach-Object { 
-                    $Alphabet += "$($Alphabet[$Letter])$($Alphabet[$_])" 
-                } 
-            }
     }
+
     Process {
         foreach($File in $Path) {
             #Resolve relative paths... Thanks Oisin! http://stackoverflow.com/a/3040982/3067642
@@ -138,6 +127,7 @@
             Try {
                 if ($ReadOnly) {
                     Write-Verbose "Opening $($File) as Read-Only"
+                    # $ReadOnlyFile = [IO.File}::OpenRead($File)
                     $ReadOnlyFile = [IO.File]::Open($File,'Open','Read','ReadWrite')
                     $ExcelFile = New-Object OfficeOpenXml.ExcelPackage
                     $ExcelFile.Load($ReadOnlyFile)
@@ -167,12 +157,29 @@
                     Write-Verbose "ROWS: $Rows"
                     Write-Verbose "COLUMNS: $Columns"
 
-                    # [opustecnica] Add ColumnEnd User Input Parameter
-                    if ( $ColumnEnd ) { $Columns = $ColumnEnd }                   
-                    $ColumnEnd = $Columns + $ColumnStart - 1
-                    $RowEnd = $Rows + $RowStart - 1
-                    Write-Verbose "LAST COLUMN: $ColumnEnd"
-                    Write-Verbose "LAST ROW: $RowEnd"
+                    Write-Verbose "START ROW: $RowStart"
+                    Write-Verbose "START COLUMN: $ColumnStart"
+
+                    if ($ColumnEnd -gt 0) {
+                        if ($ColumnEnd -lt $Columns) {
+                            $Columns = $ColumnEnd
+                        } 
+                    }
+                    else {
+                        $ColumnEnd = $Columns
+                    }
+                    
+                    if ($RowEnd -gt 0) {
+                        if ($RowEnd -lt $Rowss) {
+                            $Rows = $RowEnd
+                        } 
+                    }
+                    else {
+                        $RowEnd = $Rows
+                    }
+
+                    Write-Verbose "END ROW: $RowEnd"
+                    Write-Verbose "END COLUMN: $ColumnEnd"
                 } 
             }
 
@@ -188,19 +195,28 @@
                 }
                 Write-Verbose "User defined headers: $Header"
             } else {
+                Write-Verbose "Processing Columns $ColumnStart through $ColumnEnd"
                 $Header = @( foreach ($Column in $ColumnStart..$ColumnEnd) {
+                    Write-Verbose "PROCESSING COLUMN: $Column"
                     if($Text) {
                         $PotentialHeader = $Worksheet.Cells.Item($RowStart,$Column).Text
+                        Write-VErbose "HEADING for COLUMN $Column is $PotentialHeader"
                     } else {
                         # Handle Native Column Headers in absence of headers.
                         if ( $FirstRowIsData ) {
                             if ( $Column -le $Alphabet.Count ) {
                                 $PotentialHeader = $Alphabet[$Column - 1]
                             } else {
-                                $PotentialHeader = $Alphabet[[int]($Column / $Alphabet.Count) - 1] + $Alphabet[[int]($Column % $Alphabet.Count) - 1]
-                            } # End if FirstRowIsData
-                        } else {
+                                $PotentialHeader = $Alphabet[[Math]::Ceiling($Column / $Alphabet.Count) - 2] + $Alphabet[[int]($Column % $Alphabet.Count) - 1]
+                            } 
+                        } # End if FirstRowIsData
+                        elseif ($HeaderRow -ge 1) {
+                            $PotentialHeader = $Worksheet.Cells.Item($HeaderRow,$Column).Value
+                            Write-VErbose "HEADING for COLUMN $Column is $PotentialHeader"
+                        } 
+                        else {
                             $PotentialHeader = $Worksheet.Cells.Item($RowStart,$Column).Value
+                            Write-VErbose "HEADING for COLUMN $Column is $PotentialHeader"
                         }
                     }
 
@@ -209,19 +225,21 @@
                         Write-Verbose "Header in column $Column is whitespace or empty, setting header to '<Column $Column>'"
                         $PotentialHeader = "<Column $Column>" # Use placeholder name
                     }
-                    $PotentialHeader.Trim()
+                    $PotentialHeader
                 }) # End Header =
             }
 
-            [string[]]$SelectedHeaders = @( $Header | select -Unique )
+            [string[]]$SelectedHeaders = @( $Header | Select-Object -Unique )
             Write-Verbose "Found $Rows rows, $Columns columns, with headers:`n$($Header | Out-String)"
 
             if (-not $FirstRowIsData) { $RowStart++ }
 
+            Write-Verbose "PROCESSING ROWS $RowStart to $RowEnd"
             foreach ($Row in $RowStart..$RowEnd) {
                 $RowData = @{}
-
-                foreach ($Column in 0..($Columns - 1)) {
+                
+                ## foreach ($Column in 0..($Columns - 1)) {
+                foreach ($Column in 0..($Columns - $ColumnStart)) { 
                     $Name  = $Header[$Column]
                     if ($Text) { 
                         $Value = $Worksheet.Cells.Item($Row, ($Column + $ColumnStart)).Text
@@ -229,9 +247,9 @@
                         $Value = $Worksheet.Cells.Item($Row, ($Column + $ColumnStart)).Value
                     }
 
-                    Write-Debug "Row: $Row, Column: $Column, Name: $Name, Value = $Value"
+                    Write-Verbose "Row: $Row, Column: $Column, Name: $Name, Value = $Value"
 
-                    # Handle dates, they're too common to overlook... Could use help, not sure if this is the best regex to use?
+                    #Handle dates, they're too common to overlook... Could use help, not sure if this is the best regex to use?
                     $Format = $Worksheet.Cells.Item($Row, ($Column + $ColumnStart)).style.numberformat.format
                     if ($Format -match '\w{1,4}/\w{1,2}/\w{1,4}( \w{1,2}:\w{1,2})?' -or $Format -match $DateTimeFormat) {
                         Try {
@@ -241,14 +259,14 @@
                             Write-Verbose "Error converting '$Value' to datetime"
                         }
                     }
-
+                    # Here is the problem
                     if ( $RowData.ContainsKey($Name) ) {
                         Write-Warning "Duplicate header for '$Name' found, with value '$Value', in row $Row"
                     } else {
                         $RowData.Add($Name, $Value)
                     }
                 }
-                New-Object -TypeName PSObject -Property $RowData | Select -Property $SelectedHeaders
+                New-Object -TypeName PSObject -Property $RowData | Select-Object -Property $SelectedHeaders
             }
 
             $ExcelFile.Dispose()
